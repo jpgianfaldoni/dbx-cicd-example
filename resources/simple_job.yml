@@ -1,0 +1,12 @@
+resources:
+  jobs:
+    simple_job:
+      name: simple_etl_job
+      tasks:
+        - task_key: read_write_task
+          notebook_task:
+            notebook_path: ../src/read_write_notebook.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+

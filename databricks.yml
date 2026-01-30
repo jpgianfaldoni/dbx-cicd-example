@@ -1,0 +1,39 @@
+# This is a Databricks asset bundle definition for sdp.
+# See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
+bundle:
+  name: sdp
+  uuid: 9f5901c2-0751-4e83-b1eb-42fcd774bb7f
+
+variables:
+  catalog:
+    description: "Unity Catalog name for the target environment"
+    default: "main"
+  schema:
+    description: "Schema name for the target environment"
+    default: "default"
+
+include:
+  - resources/*.yml
+
+targets:
+  dev:
+    # The default target uses 'mode: development' to create a development copy.
+    # - Deployed resources get prefixed with '[dev my_user_name]'
+    # - Any job schedules and triggers are paused by default.
+    # See also https://docs.databricks.com/dev-tools/bundles/deployment-modes.html.
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-75be2640-5a1e.cloud.databricks.com
+    variables:
+      catalog: dev
+      schema: default
+
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-18b1e686-4955.cloud.databricks.com/
+      # We explicitly deploy to /Workspace/Users/c21616a0-20df-4674-b61d-58a461f8e2e2 to make sure we only have a single copy.
+    variables:
+      catalog: prod
+      schema: default
