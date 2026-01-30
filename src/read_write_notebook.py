@@ -31,6 +31,7 @@ df = spark.read.table(source_table)
 
 # Display sample data
 display(df)
+print('hi')
 
 # COMMAND ----------
 
