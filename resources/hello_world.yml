@@ -1,0 +1,12 @@
+resources:
+  jobs:
+    hello_world_job:
+      name: hello_world_job
+      tasks:
+        - task_key: hello_world_task
+          notebook_task:
+            notebook_path: ../src/hello_world_task
+            source: WORKSPACE
+      queue:
+        enabled: true
+      performance_target: PERFORMANCE_OPTIMIZED
