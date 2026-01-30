@@ -29,6 +29,7 @@ print(f"Writing to: {destination_table}")
 # Read data from source table
 df = spark.read.table(source_table)
 display(df)
+print('hi')
 
 # COMMAND ----------
 
