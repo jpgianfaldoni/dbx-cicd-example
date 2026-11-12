@@ -26,5 +26,3 @@ targets:
     mode: production
     workspace:
       host: https://dbc-9d246aea-02b4.cloud.databricks.com
-      # Deploys under the deploying identity (the CI service principal): one prod copy.
-      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}

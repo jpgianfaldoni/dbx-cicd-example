@@ -1,0 +1,181 @@
+{
+  "benchmarks": {
+    "questions": [
+      {
+        "answer": [
+          {
+            "content": [
+              "SELECT\n",
+              "  `product`,\n",
+              "  SUM(`totalPrice`) AS `total_sales`\n",
+              "FROM\n",
+              "  `samples`.`bakehouse`.`sales_transactions`\n",
+              "WHERE\n",
+              "  `product` IS NOT NULL\n",
+              "GROUP BY\n",
+              "  `product`\n",
+              "ORDER BY\n",
+              "  `total_sales` DESC\n",
+              "LIMIT 1;"
+            ],
+            "format": "SQL"
+          }
+        ],
+        "id": "01f1dc77c9d41b41b89f2d1aea7d1a91",
+        "question": ["Which product generates the highest sales volume?"]
+      },
+      {
+        "answer": [
+          {
+            "content": [
+              "WITH ranked_products AS (\n",
+              "  SELECT\n",
+              "    `product`,\n",
+              "    SUM(`totalPrice`) AS `total_sales`,\n",
+              "    ROW_NUMBER() OVER (ORDER BY SUM(`totalPrice`) DESC) AS `sales_rank`\n",
+              "  FROM\n",
+              "    `samples`.`bakehouse`.`sales_transactions`\n",
+              "  WHERE\n",
+              "    `product` IS NOT NULL\n",
+              "  GROUP BY\n",
+              "    `product`\n",
+              ")\n",
+              "SELECT\n",
+              "  `product`,\n",
+              "  `total_sales`\n",
+              "FROM\n",
+              "  ranked_products\n",
+              "WHERE\n",
+              "  `sales_rank` = 1;"
+            ],
+            "format": "SQL"
+          }
+        ],
+        "id": "01f1dc77c9d4112a831a28f87a947c1e",
+        "question": ["Which product ranks highest in sales?"]
+      },
+      {
+        "answer": [
+          {
+            "content": [
+              "SELECT\n",
+              "  `product`,\n",
+              "  SUM(`totalPrice`) AS `total_sales`\n",
+              "FROM\n",
+              "  `samples`.`bakehouse`.`sales_transactions`\n",
+              "WHERE\n",
+              "  `product` IS NOT NULL\n",
+              "GROUP BY\n",
+              "  `product`\n",
+              "ORDER BY\n",
+              "  `total_sales` DESC\n",
+              "LIMIT 1;"
+            ],
+            "format": "SQL"
+          }
+        ],
+        "id": "01f1dc77c9d31819b9b9d009c35c89e7",
+        "question": ["Which is our top performing product?"]
+      },
+      {
+        "answer": [
+          {
+            "content": [
+              "SELECT\n",
+              "  `product`,\n",
+              "  SUM(`totalPrice`) AS `total_sales`\n",
+              "FROM\n",
+              "  `samples`.`bakehouse`.`sales_transactions`\n",
+              "WHERE\n",
+              "  `product` IS NOT NULL\n",
+              "GROUP BY\n",
+              "  `product`\n",
+              "ORDER BY\n",
+              "  `total_sales` DESC\n",
+              "LIMIT 1;"
+            ],
+            "format": "SQL"
+          }
+        ],
+        "id": "01f1dc77c9d21edcbf8ff2d509d0634b",
+        "question": ["Which product generated the highest sales?"]
+      }
+    ]
+  },
+  "config": {
+    "sample_questions": [
+      {
+        "id": "01f1dc77c9d01f1cb6c6c3e0ef5ecf9c",
+        "question": ["Which product sold the most units?"]
+      },
+      {
+        "id": "01f1dc77c9d1199a8dcd756f1b402e71",
+        "question": ["Show me all products"]
+      },
+      {
+        "id": "01f1dc77c9d2153dba9db17c62f5c30b",
+        "question": ["What was our revenue in May 2024?"]
+      }
+    ]
+  },
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "samples.bakehouse.media_customer_reviews"
+      },
+      {
+        "identifier": "samples.bakehouse.media_gold_reviews_chunked"
+      },
+      {
+        "identifier": "samples.bakehouse.sales_customers"
+      },
+      {
+        "identifier": "samples.bakehouse.sales_franchises"
+      },
+      {
+        "identifier": "samples.bakehouse.sales_suppliers"
+      },
+      {
+        "identifier": "samples.bakehouse.sales_transactions"
+      }
+    ]
+  },
+  "instructions": {
+    "example_question_sqls": [
+      {
+        "id": "01f1dc77c9fc13e8b2a2a7b6817bd610",
+        "question": [
+          "Cash cows are customers that generated more than $150 in any given week"
+        ],
+        "sql": [
+          "WITH weekly_sales AS (\n",
+          "  SELECT\n",
+          "    `customerID`,\n",
+          "    DATE_TRUNC('week', `dateTime`) AS `week`,\n",
+          "    SUM(`totalPrice`) AS `weekly_total`\n",
+          "  FROM\n",
+          "    `samples`.`bakehouse`.`sales_transactions`\n",
+          "  WHERE\n",
+          "    `customerID` IS NOT NULL\n",
+          "  GROUP BY\n",
+          "    `customerID`,\n",
+          "    DATE_TRUNC('week', `dateTime`)\n",
+          ")\n",
+          "SELECT DISTINCT\n",
+          "  `customerID`\n",
+          "FROM\n",
+          "  weekly_sales\n",
+          "WHERE\n",
+          "  `weekly_total` > 150;"
+        ]
+      }
+    ],
+    "text_instructions": [
+      {
+        "content": ["TEST"],
+        "id": "01f1dc77c9f411b19fd90621576d3a9c"
+      }
+    ]
+  },
+  "version": 2
+}
