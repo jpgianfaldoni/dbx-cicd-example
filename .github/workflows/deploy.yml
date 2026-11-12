@@ -1,33 +1,51 @@
-name: Deploy Databricks Bundle
+name: Genie agent CI/CD
 
+# PRs into dev/main: validate + plan.  Push to dev -> deploy dev.  Push to main -> deploy prod.
 on:
+  pull_request:
+    branches: [dev, main]
   push:
-    branches:
-      - dev
-      - main
+    branches: [dev, main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.base_ref || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TARGET: ${{ (github.base_ref || github.ref_name) == 'main' && 'prod' || 'dev' }}
+  DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+  DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
 
 jobs:
-  deploy:
-    name: Deploy to ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+  validate:
+    name: Validate (${{ (github.base_ref || github.ref_name) == 'main' && 'prod' || 'dev' }})
     runs-on: ubuntu-latest
-    
-    environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
-
+    environment: ${{ (github.base_ref || github.ref_name) == 'main' && 'prod' || 'dev' }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Databricks CLI
-        uses: databricks/setup-cli@main
+      - uses: databricks/setup-cli@main
 
       - name: Validate bundle
-        run: databricks bundle validate -t ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
-        env:
-          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+        run: databricks bundle validate --strict -t "$TARGET"
+
+      - name: Plan
+        run: databricks bundle plan -t "$TARGET"
+
+  deploy:
+    name: Deploy (${{ github.ref_name == 'main' && 'prod' || 'dev' }})
+    needs: validate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: databricks/setup-cli@main
 
       - name: Deploy bundle
-        run: databricks bundle deploy -t ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
-        env:
-          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+        run: databricks bundle deploy -t "$TARGET" --auto-approve
+
+      - name: Summary
+        run: databricks bundle summary -t "$TARGET"

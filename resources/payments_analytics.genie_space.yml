@@ -1,0 +1,15 @@
+# Native Genie agent, tracked in bundle state (no title-based lookup, no duplicates).
+resources:
+  genie_spaces:
+    payments_analytics:
+      title: Payments Analytics
+      description: >-
+        For finance and product analysts: synthetic 2024 payments in USD. Purchase spend,
+        all-type processed volume, fee revenue, refunds, payment failure rates, customer
+        counts, and USD account balances as of 2024-12-31. Fixed historical data, not a live
+        feed; no net revenue, profit, forecasting, or customer contact details.
+      warehouse_id: ${var.warehouse_id}
+      # Immutable: changing it recreates the agent.
+      parent_path: ${workspace.root_path}
+      # Same definition for every target; its tables are hardcoded to jpg_serverless_west2.payments.*.
+      file_path: ../genie/payments_analytics.geniespace.json
