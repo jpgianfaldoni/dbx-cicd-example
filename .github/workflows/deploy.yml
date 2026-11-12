@@ -44,6 +44,23 @@ jobs:
 
       - uses: databricks/setup-cli@main
 
+      # Adopt manually created agents into prod state (as the CI service principal),
+      # so deploys update them instead of creating copies. No-op once bound.
+      - name: Bind existing resources (prod)
+        if: env.TARGET == 'prod'
+        run: |
+          bind() {  # <resource type> <resource key> <existing workspace id>
+            current=$(databricks bundle summary -t "$TARGET" -o json | jq -r ".resources.$1.$2.id // empty")
+            if [ -z "$current" ]; then
+              databricks bundle deployment bind "$2" "$3" -t "$TARGET" --auto-approve
+            elif [ "$current" != "$3" ]; then
+              echo "::error::$1.$2 is already bound to $current, expected $3"; exit 1
+            else
+              echo "$1.$2 already bound to $3"
+            fi
+          }
+          bind genie_spaces bakehouse 01f1dc77c97310df926755c0122fdd8b
+
       - name: Deploy bundle
         run: databricks bundle deploy -t "$TARGET" --auto-approve
 
