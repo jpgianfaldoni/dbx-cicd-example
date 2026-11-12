@@ -1,0 +1,882 @@
+{
+  "version": 2,
+  "instructions": {
+    "text_instructions": [
+      {
+        "id": "8ef13d161872525994e85f9024c7ae93",
+        "content": [
+          "## PURPOSE\nAnswer finance and product questions about this synthetic, fixed 2024 payments demo.\n\n## DISAMBIGUATION\n- If a ranking omits its metric, ask: \"Rank by purchase spend, processed volume, or completed transaction count?\"\n- If performance, growth, or a trend omits its period, ask which month, quarter, or all of 2024 to analyze.\n- If revenue is requested without a qualifier, ask whether fee revenue is intended; total business revenue and profit are unavailable.\n- Interpret relative dates against the actual current date. If the requested period is outside 2024, explain the coverage gap; never silently shift the period back to 2024.\n\n## Instructions you must follow when providing summaries\nState the requested date range, any coverage gap, filters, and units. Label money USD and round monetary values and percentages to two decimals. Mention fixed demo FX when relevant. Do not imply a historical snapshot is live data.\n"
+        ]
+      }
+    ],
+    "join_specs": [
+      {
+        "left": {
+          "identifier": "jpg_serverless_west2.payments.accounts",
+          "alias": "accounts"
+        },
+        "right": {
+          "identifier": "jpg_serverless_west2.payments.customers",
+          "alias": "customers"
+        },
+        "sql": [
+          "`accounts`.`customer_id` = `customers`.`customer_id`",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ],
+        "id": "8076cb56106051519425707917507099"
+      }
+    ],
+    "sql_snippets": {
+      "filters": [
+        {
+          "id": "bc7ed63c44b351e3aed9be507c215763",
+          "sql": [
+            "`accounts`.`status` = 'Active'"
+          ],
+          "display_name": "Active accounts",
+          "instruction": [
+            "Current account status at the 2024-12-31 snapshot, not payment outcome."
+          ],
+          "synonyms": [
+            "active accounts"
+          ]
+        }
+      ],
+      "measures": [
+        {
+          "id": "a4500e74b8db5c1c8079972701576a54",
+          "sql": [
+            "ROUND(SUM(`accounts`.`balance`), 2)"
+          ],
+          "display_name": "Account balance (USD)",
+          "instruction": [
+            "Add across account rows only, never transaction rows or time. Snapshot: 2024-12-31."
+          ],
+          "synonyms": [
+            "total account balance"
+          ],
+          "alias": "balance_usd"
+        }
+      ]
+    },
+    "example_question_sqls": [
+      {
+        "id": "0e3c1c97514d5660876141d615874e47",
+        "question": [
+          "Rank the seven customers with the largest processed volume in Q3 2024"
+        ],
+        "sql": [
+          "SELECT m.`Customer ID`, ROUND(MEASURE(m.`Processed Volume`), 2) AS processed_volume_usd FROM jpg_serverless_west2.payments.transactions_metrics m WHERE m.`Transaction Quarter` = DATE '2024-07-01' GROUP BY ALL ORDER BY processed_volume_usd DESC, m.`Customer ID` LIMIT 7"
+        ],
+        "usage_guidance": [
+          "Use the metric view Customer ID dimension for payment leaderboards; customer population questions use the customer master."
+        ]
+      },
+      {
+        "id": "474c69848a8158f9953919b163273a7c",
+        "question": [
+          "Which two merchant categories have the most purchase spend for each customer segment?"
+        ],
+        "sql": [
+          "WITH grouped AS (SELECT m.`Customer Segment` AS segment, m.`Merchant Category` AS category, MEASURE(m.`Purchase Spend`) AS spend FROM jpg_serverless_west2.payments.transactions_metrics m GROUP BY ALL), ranked AS (SELECT g.segment, g.category, g.spend, ROW_NUMBER() OVER (PARTITION BY g.segment ORDER BY g.spend DESC, g.category) AS ranking FROM grouped g) SELECT r.segment, r.category, ROUND(r.spend, 2) AS purchase_spend_usd FROM ranked r WHERE r.ranking <= 2 ORDER BY r.segment, r.ranking"
+        ],
+        "usage_guidance": [
+          "Top-N per group requires a CTE over governed aggregates, with a deterministic tie-breaker."
+        ]
+      },
+      {
+        "id": "636cef81fbf758cb955ec4069525c65e",
+        "question": [
+          "Compare purchase spend and processed volume by merchant category in Q2 2024"
+        ],
+        "sql": [
+          "SELECT m.`Merchant Category`, ROUND(MEASURE(m.`Purchase Spend`), 2) AS purchase_spend_usd, ROUND(MEASURE(m.`Processed Volume`), 2) AS processed_volume_usd FROM jpg_serverless_west2.payments.transactions_metrics m WHERE m.`Transaction Quarter` = DATE '2024-04-01' GROUP BY ALL ORDER BY purchase_spend_usd DESC"
+        ],
+        "usage_guidance": [
+          "Governed measures distinguish purchase spend from all-type processed volume. Use MEASURE(), not SUM() on a measure."
+        ]
+      },
+      {
+        "id": "783da9a4b5c25690b3e9e8f449999c12",
+        "question": [
+          "Compare refund percentages across customer segments in the second half of 2024"
+        ],
+        "sql": [
+          "SELECT m.`Customer Segment`, ROUND(100 * MEASURE(m.`Refund Rate`), 2) AS refund_rate_pct FROM jpg_serverless_west2.payments.transactions_metrics m WHERE m.`Transaction Date` >= DATE '2024-07-01' GROUP BY ALL ORDER BY refund_rate_pct DESC"
+        ],
+        "usage_guidance": [
+          "Refund Rate is a fraction based on monetary amounts; multiply by 100 only when explicitly returning percentage numbers."
+        ]
+      },
+      {
+        "id": "aa0902adc20853dc8189b3814b0acc28",
+        "question": [
+          "Show monthly purchase spend and active customers in 2024"
+        ],
+        "sql": [
+          "SELECT m.`Transaction Month`, ROUND(MEASURE(m.`Purchase Spend`), 2) AS purchase_spend_usd, MEASURE(m.`Distinct Active Customers`) AS active_customers FROM jpg_serverless_west2.payments.transactions_metrics m GROUP BY ALL ORDER BY m.`Transaction Month`"
+        ],
+        "usage_guidance": [
+          "Time grouping on dimensions. Active customers are distinct completed-payment customers at each queried grain."
+        ]
+      },
+      {
+        "id": "aade3500f21a59b9a97c6af27a57c243",
+        "question": [
+          "Show month-over-month changes in processed volume"
+        ],
+        "sql": [
+          "WITH monthly AS (SELECT m.`Transaction Month` AS month, MEASURE(m.`Processed Volume`) AS volume FROM jpg_serverless_west2.payments.transactions_metrics m GROUP BY ALL), previous AS (SELECT month, volume, LAG(volume) OVER (ORDER BY month) AS previous_volume FROM monthly) SELECT p.month, ROUND(p.volume, 2) AS processed_volume_usd, ROUND(100 * (p.volume - p.previous_volume) / NULLIF(p.previous_volume, 0), 2) AS growth_pct FROM previous p ORDER BY p.month"
+        ],
+        "usage_guidance": [
+          "Aggregate metric measures in a CTE, then use SQL window functions. Guard a zero prior denominator."
+        ]
+      },
+      {
+        "id": "cd86fbe9beb55cf1abed069f5f60000a",
+        "question": [
+          "Compare payment failure percentages by account product during Q1 2024"
+        ],
+        "sql": [
+          "SELECT m.`Account Type`, ROUND(100 * MEASURE(m.`Failure Rate`), 2) AS failure_rate_pct FROM jpg_serverless_west2.payments.transactions_metrics m WHERE m.`Transaction Quarter` = DATE '2024-01-01' GROUP BY ALL ORDER BY failure_rate_pct DESC"
+        ],
+        "usage_guidance": [
+          "Failure Rate uses all attempted statuses as its denominator. Do not filter financial KPIs to derive outcome rates."
+        ]
+      },
+      {
+        "id": "fb7160a0d3735ac99f526178a14bcf63",
+        "question": [
+          "What is the active account balance by customer segment at the December 2024 snapshot?"
+        ],
+        "sql": [
+          "SELECT c.segment, ROUND(SUM(a.balance), 2) AS balance_usd FROM jpg_serverless_west2.payments.accounts a JOIN jpg_serverless_west2.payments.customers c ON a.customer_id = c.customer_id WHERE a.status = 'Active' GROUP BY c.segment ORDER BY balance_usd DESC"
+        ],
+        "usage_guidance": [
+          "Accounts join many-to-one to customers. Sum balances at account grain; they are not transaction measures."
+        ]
+      }
+    ]
+  },
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "jpg_serverless_west2.payments.accounts",
+        "column_configs": [
+          {
+            "column_name": "account_id",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false,
+            "description": [
+              "Unique account identifier; primary key. Transactions join many-to-one on account_id."
+            ],
+            "synonyms": [
+              "account ID"
+            ]
+          },
+          {
+            "column_name": "account_type",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true,
+            "description": [
+              "Product: Checking, Savings, Credit Card. Classifies the account, not a payment channel."
+            ],
+            "synonyms": [
+              "product",
+              "account product"
+            ]
+          },
+          {
+            "column_name": "balance",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false,
+            "description": [
+              "USD account balance as of balance_as_of_date. Additive across accounts only; not payment spend or a time series."
+            ],
+            "synonyms": [
+              "account balance",
+              "balance in USD"
+            ]
+          },
+          {
+            "column_name": "balance_as_of_date",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false,
+            "description": [
+              "Balance and account-status snapshot date, always 2024-12-31 in this fixed demo."
+            ],
+            "synonyms": [
+              "balance snapshot date"
+            ]
+          },
+          {
+            "column_name": "customer_id",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false,
+            "description": [
+              "Owning customer, FK to customers.customer_id; also the customer on every transaction for this account."
+            ],
+            "synonyms": [
+              "account owner"
+            ]
+          },
+          {
+            "column_name": "open_date",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false,
+            "description": [
+              "Calendar opening date, on or after the owning customer's signup and before 2024 transactions."
+            ],
+            "synonyms": [
+              "account opening date"
+            ]
+          },
+          {
+            "column_name": "status",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true,
+            "description": [
+              "Account snapshot status: Active, Dormant, Closed. Distinct from transaction status; not status at transaction time."
+            ],
+            "synonyms": [
+              "account status"
+            ]
+          }
+        ]
+      },
+      {
+        "identifier": "jpg_serverless_west2.payments.customers",
+        "column_configs": [
+          {
+            "column_name": "country",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true,
+            "description": [
+              "Country of residence; ISO-2 codes US, CA, GB, DE, FR. Distinct from merchant country."
+            ],
+            "synonyms": [
+              "customer country",
+              "home country"
+            ]
+          },
+          {
+            "column_name": "customer_id",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false,
+            "description": [
+              "Unique customer identifier; primary key. Join accounts.customer_id or transactions.customer_id many-to-one."
+            ],
+            "synonyms": [
+              "customer ID",
+              "client identifier"
+            ]
+          },
+          {
+            "column_name": "email",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false,
+            "description": [
+              "Synthetic, non-deliverable address under example.invalid; excluded from Genie."
+            ],
+            "exclude": true
+          },
+          {
+            "column_name": "first_name",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false,
+            "description": [
+              "Synthetic first name; contact field excluded from Genie. Exclusion is not an access-control policy."
+            ],
+            "exclude": true
+          },
+          {
+            "column_name": "last_name",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false,
+            "description": [
+              "Synthetic last name; contact field excluded from Genie."
+            ],
+            "exclude": true
+          },
+          {
+            "column_name": "segment",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true,
+            "description": [
+              "Customer segment: Retail, Affluent, Private, SMB. Snapshot classification, not historical changes."
+            ],
+            "synonyms": [
+              "customer segment",
+              "tier"
+            ]
+          },
+          {
+            "column_name": "signup_date",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false,
+            "description": [
+              "Calendar signup date, 2020-2022; precedes account opening and all 2024 transactions."
+            ],
+            "synonyms": [
+              "signup date",
+              "onboarding date"
+            ]
+          }
+        ]
+      },
+      {
+        "identifier": "jpg_serverless_west2.payments.transactions_metrics",
+        "column_configs": [
+          {
+            "column_name": "Account ID",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false
+          },
+          {
+            "column_name": "Account Status",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "Account Type",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "Channel",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "Currency",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "Customer Country",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "Customer ID",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false
+          },
+          {
+            "column_name": "Customer Segment",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "Merchant Category",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "Merchant Country",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "Merchant ID",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false
+          },
+          {
+            "column_name": "Merchant Name",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "Transaction Date",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false
+          },
+          {
+            "column_name": "Transaction Month",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false
+          },
+          {
+            "column_name": "Transaction Quarter",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false
+          },
+          {
+            "column_name": "Transaction Status",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true
+          },
+          {
+            "column_name": "Transaction Timestamp",
+            "enable_format_assistance": false,
+            "enable_entity_matching": false
+          },
+          {
+            "column_name": "Transaction Type",
+            "enable_format_assistance": true,
+            "enable_entity_matching": true
+          }
+        ]
+      }
+    ]
+  },
+  "benchmarks": {
+    "questions": [
+      {
+        "id": "1c53e2649fbd5df1bb3e461d362b6a11",
+        "question": [
+          "How many transactions failed at ATMs?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT MEASURE(`Failed Transaction Count`) AS failed_count FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Channel` = 'ATM'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "22636e8b9c835a84bfe36e63026aee40",
+        "question": [
+          "Show completed refunds in USD for each account product."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Account Type`, ROUND(MEASURE(`Refund Amount`), 2) AS refund_amount_usd FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY refund_amount_usd DESC"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "2b88373c2f865b2a844f997d876e733a",
+        "question": [
+          "Sum active account balances for each product at the 2024-12-31 snapshot."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT a.account_type, ROUND(SUM(a.balance), 2) AS balance_usd FROM jpg_serverless_west2.payments.accounts a WHERE a.status = 'Active' GROUP BY a.account_type ORDER BY balance_usd DESC"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "2ba15c229ff85756a733984c9e41aca5",
+        "question": [
+          "What is the gross USD volume of completed payments, including purchases, refunds, transfers, withdrawals, and fees?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT ROUND(MEASURE(`Processed Volume`), 2) AS processed_volume_usd FROM jpg_serverless_west2.payments.transactions_metrics"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "2f3f3adf4c1d526f95a3206455b4afc5",
+        "question": [
+          "How many unique Affluent customers made a completed transaction?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT MEASURE(`Distinct Active Customers`) AS active_customers FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Customer Segment` = 'Affluent'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "35be00dbab9a56b58f93b9cb3c2c3494",
+        "question": [
+          "Break down the number of completed payments by channel."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Channel`, MEASURE(`Transaction Count`) AS txn_count FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY txn_count DESC"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "3e5cfc6b6271518598e84d129b788741",
+        "question": [
+          "Show the entire customer population count by country, including customers without transactions."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT c.country, COUNT(*) AS customer_count FROM jpg_serverless_west2.payments.customers c GROUP BY c.country ORDER BY customer_count DESC"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "3e877e81a92c55c1972d394df8a92412",
+        "question": [
+          "What was our biggest month by completed purchase amount in USD?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Transaction Month`, ROUND(MEASURE(`Purchase Spend`), 2) AS purchase_spend_usd FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY purchase_spend_usd DESC, `Transaction Month` LIMIT 1"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "3f6fad0600435e5a81b603fa31b14d59",
+        "question": [
+          "Count the failed ATM payments."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT MEASURE(`Failed Transaction Count`) AS failed_count FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Channel` = 'ATM'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "43d93264d8ec5b5f9aff2bf8ae2f99e4",
+        "question": [
+          "What is total processed volume across all completed transaction types in 2024?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT ROUND(MEASURE(`Processed Volume`), 2) AS processed_volume_usd FROM jpg_serverless_west2.payments.transactions_metrics"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "4693cd7a7ac8580db53969a0ab483cab",
+        "question": [
+          "Run a SQL count of payment attempts recorded for January 2025, and explain the dataset coverage."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT MEASURE(`Attempted Transaction Count`) AS attempt_count FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Transaction Date` >= DATE '2025-01-01' AND `Transaction Date` < DATE '2025-02-01'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "4dc03c21f1385aea8c76e70a39a49548",
+        "question": [
+          "How much did customers spend on purchases in USD during 2024?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT ROUND(MEASURE(`Purchase Spend`), 2) AS purchase_spend_usd FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Transaction Date` >= DATE '2024-01-01' AND `Transaction Date` < DATE '2025-01-01'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "4e6322767a3852acb8461d31f98f808d",
+        "question": [
+          "How many completed transactions were there in each channel?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Channel`, MEASURE(`Transaction Count`) AS txn_count FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY txn_count DESC"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "55422296815d5868b85ffe0c22538d38",
+        "question": [
+          "How much fee revenue did we collect in the fourth quarter of 2024?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT ROUND(MEASURE(`Fee Revenue`), 2) AS fee_revenue_usd FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Transaction Quarter` = DATE '2024-10-01'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "6e9e6532a19251e5a246e76f0949d311",
+        "question": [
+          "How many active customers are in the Affluent segment?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT MEASURE(`Distinct Active Customers`) AS active_customers FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Customer Segment` = 'Affluent'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "82af81e2ccae59acbaa5e65dc5afc56d",
+        "question": [
+          "List the 5 merchants with the highest completed purchase amount."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Merchant Name`, ROUND(MEASURE(`Purchase Spend`), 2) AS purchase_spend_usd FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY purchase_spend_usd DESC, `Merchant Name` LIMIT 5"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "8be25c8d64cc50aeaf0fd4862394ae15",
+        "question": [
+          "List the top five customer IDs by purchase spend in USD during 2024."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Customer ID`, ROUND(MEASURE(`Purchase Spend`), 2) AS purchase_spend_usd FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY purchase_spend_usd DESC, `Customer ID` LIMIT 5"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "8c3bc93a199453f3a25e56473c646d9a",
+        "question": [
+          "What was the total completed purchase spend in 2024?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT ROUND(MEASURE(`Purchase Spend`), 2) AS purchase_spend_usd FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Transaction Date` >= DATE '2024-01-01' AND `Transaction Date` < DATE '2025-01-01'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a52ae6da0cf2566cba674c16ce539767",
+        "question": [
+          "Show failure rate by channel with all statuses in the denominator, as percentage numbers rounded to two decimal places."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Channel`, ROUND(100 * MEASURE(`Failure Rate`), 2) AS failure_rate_pct FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY failure_rate_pct DESC"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a8ab136163ad548586460ec4872bc080",
+        "question": [
+          "What is the average completed transaction value for Travel merchants?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT ROUND(MEASURE(`Average Transaction Value`), 2) AS avg_txn_value_usd FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Merchant Category` = 'Travel'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "ada311f082e2572c9458b427dec6f747",
+        "question": [
+          "Who are the top 5 merchants by purchase spend?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Merchant Name`, ROUND(MEASURE(`Purchase Spend`), 2) AS purchase_spend_usd FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY purchase_spend_usd DESC, `Merchant Name` LIMIT 5"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "b29de816f18c578d9dff91af4ed03838",
+        "question": [
+          "What is the USD balance of active accounts by account type as of December 31, 2024?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT a.account_type, ROUND(SUM(a.balance), 2) AS balance_usd FROM jpg_serverless_west2.payments.accounts a WHERE a.status = 'Active' GROUP BY a.account_type ORDER BY balance_usd DESC"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "b5de3e8126d55883b1fd255fd9c3170b",
+        "question": [
+          "What is the total completed refund amount by account type?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Account Type`, ROUND(MEASURE(`Refund Amount`), 2) AS refund_amount_usd FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY refund_amount_usd DESC"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "c06fb76c52ca5bf2a5ed1f0630921bad",
+        "question": [
+          "What percentage of all transaction attempts failed in each channel? Return percentage numbers rounded to two decimal places."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Channel`, ROUND(100 * MEASURE(`Failure Rate`), 2) AS failure_rate_pct FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY failure_rate_pct DESC"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "d72d453d4de854f794bcc1d165cbf4bc",
+        "question": [
+          "Return a SQL count of all transaction attempts dated from 2025-01-01 through 2025-01-31, and state whether this period is covered by the dataset."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT MEASURE(`Attempted Transaction Count`) AS attempt_count FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Transaction Date` >= DATE '2025-01-01' AND `Transaction Date` < DATE '2025-02-01'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e02cf244349c56c3a0ee55ccd5d957ca",
+        "question": [
+          "Which 5 customers have the highest completed purchase spend? Identify them by customer ID."
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Customer ID`, ROUND(MEASURE(`Purchase Spend`), 2) AS purchase_spend_usd FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY purchase_spend_usd DESC, `Customer ID` LIMIT 5"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e71d6e4af33751f9920a8a5fa59bd0b5",
+        "question": [
+          "What were total completed fees in Q4 2024?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT ROUND(MEASURE(`Fee Revenue`), 2) AS fee_revenue_usd FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Transaction Quarter` = DATE '2024-10-01'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "ef0518c642785e8e8520ed94c862dcdf",
+        "question": [
+          "What's the average ticket size for completed payments in the Travel category?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT ROUND(MEASURE(`Average Transaction Value`), 2) AS avg_txn_value_usd FROM jpg_serverless_west2.payments.transactions_metrics WHERE `Merchant Category` = 'Travel'"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "f735bcc567d252418839162449880e4a",
+        "question": [
+          "How many customers do we have in each country?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT c.country, COUNT(*) AS customer_count FROM jpg_serverless_west2.payments.customers c GROUP BY c.country ORDER BY customer_count DESC"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "fc27e930d67b517ea9cf1c499d9d0339",
+        "question": [
+          "Which 2024 month had the highest purchase spend?"
+        ],
+        "answer": [
+          {
+            "format": "SQL",
+            "content": [
+              "SELECT `Transaction Month`, ROUND(MEASURE(`Purchase Spend`), 2) AS purchase_spend_usd FROM jpg_serverless_west2.payments.transactions_metrics GROUP BY ALL ORDER BY purchase_spend_usd DESC, `Transaction Month` LIMIT 1"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "config": {
+    "sample_questions": [
+      {
+        "id": "4f1039a50e655803a6ff0b4b78782561",
+        "question": [
+          "What is the refund rate by customer segment for 2024?"
+        ]
+      },
+      {
+        "id": "d178d9d7296c5a018b6cf0f041a6f252",
+        "question": [
+          "Show monthly purchase spend and active customers in 2024."
+        ]
+      },
+      {
+        "id": "d60ebdb9986c5345bd26615898eb7409",
+        "question": [
+          "Compare purchase spend and processed volume by merchant category in 2024."
+        ]
+      },
+      {
+        "id": "f9bb133f049d54e19b7b0d1c71da5878",
+        "question": [
+          "Which payment channel had the highest failure rate in 2024?"
+        ]
+      },
+      {
+        "id": "fa24219152835c5094277609c53e1f61",
+        "question": [
+          "What is the active account balance at the December 31, 2024 snapshot?"
+        ]
+      }
+    ]
+  }
+}
